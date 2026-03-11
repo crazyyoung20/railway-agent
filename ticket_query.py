@@ -1,4 +1,4 @@
-"""
+""" 
 模块二：12306 余票查询工具层
 功能：真实 API 查询 → 超时/封禁 → 模拟数据 fallback
 依赖：requests, pydantic, python-dateutil（pip install python-dateutil --break-system-packages）

@@ -176,3 +176,5 @@ curl "http://localhost:8000/api/v1/knowledge?q=郑州换乘需要多少时间&ca
 | 余票查询   | 12306 真实 API            | 路由模板模拟数据      |
 | 向量检索   | ZhipuAI Embedding + FAISS | BM25 单独承担检索     |
 | 推荐语生成 | GLM-4-flash               | 规则模板生成          |
+
+ 

@@ -17,7 +17,7 @@
 
 ## 系统架构
 
-![unnamed](/Users/young/Downloads/unnamed.jpg)
+![framework](./framework.jpg)
 
 ------
 

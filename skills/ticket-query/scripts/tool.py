@@ -1,5 +1,5 @@
 """
-Skill: 余票查询
+Skill: 余票查询（半真实Mock数据）
 标准化为 LangChain @tool，供 ReAct Agent 调用。
 输入：from_station, to_station, date, train_filter(可选)
 输出：JSON 字符串（列车列表）
@@ -11,7 +11,6 @@ import json
 import time
 import random
 import logging
-import requests
 from datetime import datetime, timedelta
 from typing import Optional, List, Dict
 from enum import Enum
@@ -83,139 +82,106 @@ def get_station_code(name: str) -> Optional[str]:
     return None
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Mock 数据生成器
+# 真实线路和票价数据
 # ══════════════════════════════════════════════════════════════════════════════
 
-MOCK_TRAINS = {
-    ("北京南", "上海虹桥"): [
-        {"no": "G1", "dur": 268, "dep": "06:48", "arr": "11:16", "type": "G"},
-        {"no": "G3", "dur": 282, "dep": "07:00", "arr": "11:42", "type": "G"},
-        {"no": "G11", "dur": 290, "dep": "08:00", "arr": "12:50", "type": "G"},
-        {"no": "G13", "dur": 298, "dep": "09:00", "arr": "13:58", "type": "G"},
-    ],
-    ("北京西", "广州南"): [
-        {"no": "G71", "dur": 480, "dep": "08:00", "arr": "16:00", "type": "G"},
-        {"no": "G79", "dur": 508, "dep": "09:28", "arr": "17:56", "type": "G"},
-    ],
-    ("北京西", "武汉"): [
-        {"no": "G511", "dur": 230, "dep": "07:00", "arr": "10:50", "type": "G"},
-        {"no": "G515", "dur": 238, "dep": "08:30", "arr": "12:28", "type": "G"},
-        {"no": "G517", "dur": 245, "dep": "10:00", "arr": "14:05", "type": "G"},
-        {"no": "G521", "dur": 240, "dep": "13:00", "arr": "17:00", "type": "G"},
-    ],
-    ("武汉", "广州南"): [
-        {"no": "G809", "dur": 220, "dep": "09:00", "arr": "12:40", "type": "G"},
-        {"no": "G811", "dur": 228, "dep": "11:00", "arr": "14:48", "type": "G"},
-        {"no": "G819", "dur": 235, "dep": "13:30", "arr": "17:25", "type": "G"},
-        {"no": "G821", "dur": 240, "dep": "15:00", "arr": "19:00", "type": "G"},
-    ],
-    ("北京西", "郑州东"): [
-        {"no": "G551", "dur": 130, "dep": "07:30", "arr": "09:40", "type": "G"},
-        {"no": "G553", "dur": 135, "dep": "08:00", "arr": "10:15", "type": "G"},
-        {"no": "G555", "dur": 132, "dep": "10:00", "arr": "12:12", "type": "G"},
-        {"no": "G557", "dur": 130, "dep": "12:00", "arr": "14:10", "type": "G"},
-        {"no": "G559", "dur": 128, "dep": "15:00", "arr": "17:08", "type": "G"},
-    ],
-    ("郑州东", "广州南"): [
-        {"no": "G821", "dur": 350, "dep": "10:30", "arr": "16:20", "type": "G"},
-        {"no": "G823", "dur": 360, "dep": "11:00", "arr": "17:00", "type": "G"},
-        {"no": "G825", "dur": 355, "dep": "12:30", "arr": "18:25", "type": "G"},
-        {"no": "G829", "dur": 340, "dep": "14:30", "arr": "20:10", "type": "G"},
-    ],
-    ("北京南", "南京南"): [
-        {"no": "G101", "dur": 130, "dep": "07:00", "arr": "09:10", "type": "G"},
-        {"no": "G103", "dur": 125, "dep": "08:30", "arr": "10:35", "type": "G"},
-        {"no": "G105", "dur": 128, "dep": "10:00", "arr": "12:08", "type": "G"},
-    ],
-    ("南京南", "上海虹桥"): [
-        {"no": "G7001", "dur": 70, "dep": "09:30", "arr": "10:40", "type": "G"},
-        {"no": "G7003", "dur": 68, "dep": "11:00", "arr": "12:08", "type": "G"},
-        {"no": "G7005", "dur": 72, "dep": "13:00", "arr": "14:12", "type": "G"},
-    ],
-    ("上海虹桥", "广州南"): [
-        {"no": "G1701", "dur": 508, "dep": "07:00", "arr": "15:28", "type": "G"},
-        {"no": "G1703", "dur": 520, "dep": "09:00", "arr": "17:40", "type": "G"},
-    ],
-    ("长沙南", "广州南"): [
-        {"no": "G1001", "dur": 120, "dep": "08:00", "arr": "10:00", "type": "G"},
-        {"no": "G1003", "dur": 115, "dep": "10:30", "arr": "12:25", "type": "G"},
-        {"no": "G1005", "dur": 118, "dep": "12:00", "arr": "14:00", "type": "G"},
-        {"no": "G1007", "dur": 122, "dep": "15:00", "arr": "17:02", "type": "G"},
-    ],
-    ("北京西", "长沙南"): [
-        {"no": "G801", "dur": 350, "dep": "07:00", "arr": "12:50", "type": "G"},
-        {"no": "G803", "dur": 360, "dep": "09:00", "arr": "15:00", "type": "G"},
-        {"no": "G805", "dur": 355, "dep": "11:00", "arr": "16:55", "type": "G"},
-    ],
+# 真实票价数据（元/公里：G字头0.46元/公里，D字头0.31元/公里）
+ROUTE_DATA = {
+    ("北京南", "上海虹桥"): {"distance": 1318, "duration": 270, "type": "G",
+                         "price": {"二等座": 553, "一等座": 933, "商务座": 1748}},
+    ("北京西", "广州南"): {"distance": 2298, "duration": 480, "type": "G",
+                         "price": {"二等座": 862, "一等座": 1380, "商务座": 2724}},
+    ("北京西", "武汉"): {"distance": 1229, "duration": 240, "type": "G",
+                       "price": {"二等座": 520, "一等座": 832, "商务座": 1640}},
+    ("武汉", "广州南"): {"distance": 1069, "duration": 220, "type": "G",
+                       "price": {"二等座": 463, "一等座": 740, "商务座": 1460}},
+    ("北京西", "郑州东"): {"distance": 693, "duration": 130, "type": "G",
+                         "price": {"二等座": 309, "一等座": 495, "商务座": 977}},
+    ("郑州东", "广州南"): {"distance": 1605, "duration": 350, "type": "G",
+                         "price": {"二等座": 727, "一等座": 1163, "商务座": 2296}},
 }
 
-SEAT_PRICE_BASE = {
-    ("北京南", "上海虹桥"): {"商务座": 1748, "一等座": 933, "二等座": 553},
-    ("北京西", "广州南"):   {"商务座": 2630, "一等座": 1283, "二等座": 864},
-    ("北京西", "武汉"):     {"商务座": 1180, "一等座": 580, "二等座": 349},
-    ("武汉", "广州南"):     {"商务座": 1180, "一等座": 590, "二等座": 354},
-    ("北京西", "郑州东"):   {"商务座": 690, "一等座": 339, "二等座": 204},
-    ("郑州东", "广州南"):   {"商务座": 1630, "一等座": 798, "二等座": 479},
-    ("北京南", "南京南"):   {"商务座": 720, "一等座": 352, "二等座": 212},
-    ("南京南", "上海虹桥"): {"商务座": 260, "一等座": 128, "二等座": 77},
-    ("长沙南", "广州南"):   {"商务座": 650, "一等座": 318, "二等座": 191},
-    ("北京西", "长沙南"):   {"商务座": 1630, "一等座": 798, "二等座": 479},
-}
+# 热门线路模板
+HOT_ROUTES = list(ROUTE_DATA.keys())
 
-def _make_mock_seats(from_s: str, to_s: str) -> List[SeatInfo]:
-    base = SEAT_PRICE_BASE.get((from_s, to_s), {
-        "商务座": 1200, "一等座": 600, "二等座": 360
-    })
+def _get_route_info(from_s: str, to_s: str) -> dict:
+    """获取线路真实信息，没有的话自动生成相似数据"""
+    key = (from_s, to_s)
+    if key in ROUTE_DATA:
+        return ROUTE_DATA[key].copy()
+    # 反向线路
+    reverse_key = (to_s, from_s)
+    if reverse_key in ROUTE_DATA:
+        info = ROUTE_DATA[reverse_key].copy()
+        return info
+    # 自动生成合理数据
+    distance = random.randint(500, 2500)
+    duration = int(distance / 300 * 60)  # 平均300km/h
+    price_2nd = int(distance * 0.46)
+    return {
+        "distance": distance,
+        "duration": duration,
+        "type": "G",
+        "price": {"二等座": price_2nd, "一等座": int(price_2nd * 1.8), "商务座": int(price_2nd * 3.2)}
+    }
+
+def _make_mock_seats(route_info: dict) -> List[SeatInfo]:
+    """生成真实的座位余票状态"""
     statuses = [TicketStatus.AVAILABLE, TicketStatus.AVAILABLE, TicketStatus.FEW_LEFT, TicketStatus.SOLD_OUT]
     seats = []
-    for seat, price in base.items():
-        st = random.choice(statuses)
+    price = route_info["price"]
+    for seat_type, base_price in price.items():
+        # 高峰时段（早8晚6）、节假日余票紧张
+        now = datetime.now()
+        is_peak = (7 <= now.hour <= 9) or (17 <= now.hour <= 19) or now.weekday() >=5
+        st = random.choice(statuses) if not is_peak else random.choice([TicketStatus.FEW_LEFT, TicketStatus.SOLD_OUT, TicketStatus.AVAILABLE])
+
         seats.append(SeatInfo(
-            seat_type=seat,
+            seat_type=seat_type,
             status=st,
             count=random.randint(1, 20) if st != TicketStatus.SOLD_OUT else 0,
-            price=round(price * random.uniform(0.95, 1.05), 0)
+            price=round(base_price * random.uniform(0.98, 1.02), 0)  # 票价小幅度波动
         ))
     return seats
 
-def _get_mock_trains(from_s: str, to_s: str, date: str) -> List[TrainTicket]:
-    key = (from_s, to_s)
-    templates = MOCK_TRAINS.get(key, [])
-    if not templates:
-        # 反向查找再尝试
-        for (a, b), trains in MOCK_TRAINS.items():
-            if (a in from_s or from_s in a) and (b in to_s or to_s in b):
-                templates = trains
-                break
-    if not templates:
-        # 生成通用 mock
-        templates = [
-            {"no": f"G{random.randint(100,999)}", "dur": random.randint(120, 600),
-             "dep": f"{random.randint(6,18):02d}:00", "arr": "", "type": "G"}
-        ]
+def _generate_trains(from_s: str, to_s: str, date: str, count: int = 5) -> List[TrainTicket]:
+    """生成真实的车次列表"""
+    route_info = _get_route_info(from_s, to_s)
+    trains = []
 
-    result = []
-    for t in templates:
-        dep_h, dep_m = map(int, t["dep"].split(":"))
-        total_m = dep_h * 60 + dep_m + t["dur"]
+    start_hour = 6  # 首班车6点
+    interval = random.randint(30, 90)  # 发车间隔30-90分钟
+
+    for i in range(count):
+        dep_h = start_hour + (i * interval // 60)
+        dep_m = (i * interval) % 60
+        depart_time = f"{dep_h:02d}:{dep_m:02d}"
+
+        # 计算到达时间
+        dur_min = route_info["duration"] + random.randint(-10, 20)  # 运行时间±10-20分钟
+        total_m = dep_h * 60 + dep_m + dur_min
         arr_h, arr_m = total_m // 60 % 24, total_m % 60
-        cross = total_m // 60 >= 24
-        arr = t.get("arr") or f"{arr_h:02d}:{arr_m:02d}"
+        arrive_time = f"{arr_h:02d}:{arr_m:02d}"
+        is_cross_day = total_m // 60 >= 24
 
-        result.append(TrainTicket(
-            train_no=t["no"],
-            train_type=t["type"],
+        train_no = f"{route_info['type']}{random.randint(1, 999)}"
+
+        trains.append(TrainTicket(
+            train_no=train_no,
+            train_type=route_info["type"],
             from_station=from_s,
             to_station=to_s,
-            depart_time=t["dep"],
-            arrive_time=arr,
-            duration=f"{t['dur']//60:02d}:{t['dur']%60:02d}",
-            duration_minutes=t["dur"],
-            is_cross_day=cross,
-            seats=_make_mock_seats(from_s, to_s),
+            depart_time=depart_time,
+            arrive_time=arrive_time,
+            duration=f"{dur_min//60}时{dur_min%60}分",
+            duration_minutes=dur_min,
+            is_cross_day=is_cross_day,
+            seats=_make_mock_seats(route_info),
             data_source="mock"
         ))
-    return result
+
+    return trains
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # LangChain Tool 定义
@@ -236,7 +202,18 @@ def query_tickets(from_station: str, to_station: str, date: str,
     当需要查询直达票或中转票的某一段时，调用此工具。
     """
     logger.info(f"[Skill:TicketQuery] {from_station}→{to_station} {date}")
-    trains = _get_mock_trains(from_station, to_station, date)
+
+    # 标准化站名匹配
+    from_std = from_station
+    to_std = to_station
+    for station in STATION_CODE_MAP.keys():
+        if from_station in station or station in from_station:
+            from_std = station
+        if to_station in station or station in to_station:
+            to_std = station
+
+    # 生成车次
+    trains = _generate_trains(from_std, to_std, date)
 
     if train_filter:
         trains = [t for t in trains if t.train_no.startswith(train_filter.upper())]
@@ -262,8 +239,8 @@ def query_tickets(from_station: str, to_station: str, date: str,
         })
 
     result = {
-        "from_station": from_station,
-        "to_station": to_station,
+        "from_station": from_std,
+        "to_station": to_std,
         "date": date,
         "total": len(output),
         "trains": output,

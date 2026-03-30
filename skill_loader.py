@@ -129,6 +129,7 @@ class SkillLoader:
         "station-normalizer": ["normalize_station"],
         "transfer-hub":       ["get_transfer_hubs", "assess_transfer_risk_tool"],
         "rag-knowledge":      ["search_railway_knowledge"],
+        "knowledge-graph":    ["search_train_details", "search_station_details", "compare_trains", "search_trains_by_feature"],
     }
 
     def __init__(self, skills_dir: str | Path):

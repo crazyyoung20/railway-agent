@@ -67,16 +67,27 @@ from langgraph.prebuilt import ToolNode
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.store.memory import InMemoryStore
 
-# Skills
-sys.path.insert(0, os.path.dirname(__file__))
-from skills.ticket_query_skill import query_tickets
-from skills.station_normalizer_skill import normalize_station
-from skills.transfer_hub_skill import get_transfer_hubs, assess_transfer_risk_tool
-from skills.rag_knowledge_skill import search_railway_knowledge
+# 通过 SkillLoader 按 Agent Skills 规范加载工具
+# 扫描 skills/ 目录 → 解析 SKILL.md frontmatter → 动态 import scripts/tool.py
+_AGENT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _AGENT_DIR)
+from skill_loader import SkillLoader
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s [%(levelname)s] %(name)s - %(message)s")
 logger = logging.getLogger("railway_agent_v3")
+
+
+def _load_tools() -> list:
+    """从 skills/ 目录按 Agent Skills 规范加载所有工具"""
+    skills_dir = os.path.join(_AGENT_DIR, "skills")
+    loader = SkillLoader(skills_dir)
+    tools = loader.load_all()
+    logger.info(
+        f"[SkillLoader] 加载了 {len(loader.list_skills())} 个 skill，"
+        f"{len(tools)} 个工具：{[t.name for t in tools]}"
+    )
+    return tools
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -104,13 +115,8 @@ class AgentState(TypedDict):
 # 2. 工具 & LLM
 # ══════════════════════════════════════════════════════════════════════════════
 
-TOOLS = [
-    normalize_station,
-    query_tickets,
-    get_transfer_hubs,
-    assess_transfer_risk_tool,
-    search_railway_knowledge,
-]
+# 通过 SkillLoader 加载，不再硬编码 import
+TOOLS = _load_tools()
 
 def _load_dotenv(path=".env"):
     if os.path.exists(path):
@@ -124,9 +130,37 @@ def _load_dotenv(path=".env"):
 def build_llm(mock=False):
     if mock:
         return None
+
+    # 优先使用config.py统一配置
+    try:
+        from config import settings
+        llm_config = settings.llm
+
+        if llm_config.api_key:
+            return ChatOpenAI(
+                model=llm_config.model,
+                api_key=llm_config.api_key,
+                base_url=llm_config.base_url,
+                temperature=llm_config.temperature,
+                max_tokens=llm_config.max_tokens,
+                timeout=llm_config.timeout,
+            ).bind_tools(TOOLS)
+    except ImportError:
+        pass
+
+    # 降级到原有环境变量方式（兼容旧代码）
     zhipu_key = os.environ.get("ZHIPUAI_API_KEY", "")
     openai_key = os.environ.get("OPENAI_API_KEY", "")
-    if zhipu_key:
+    volcengine_key = os.environ.get("VOLCENGINE_API_KEY", "")
+
+    if volcengine_key:
+        return ChatOpenAI(
+            model=os.environ.get("VOLCENGINE_MODEL", "coding-plan"),
+            api_key=volcengine_key,
+            base_url=os.environ.get("VOLCENGINE_BASE_URL", "https://ark.cn-beijing.volces.com/api/coding/v3"),
+            temperature=0.1,
+        ).bind_tools(TOOLS)
+    elif zhipu_key:
         return ChatOpenAI(
             model="glm-4-flash", api_key=zhipu_key,
             base_url="https://open.bigmodel.cn/api/paas/v4/",

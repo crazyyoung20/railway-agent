@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  # 铁路Agent服务
+  railway-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: railway-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - ENV=prod
+      - LOG_LEVEL=INFO
+      # LLM配置（需要在.env中配置）
+      - LLM_PROVIDER=zhipu
+      - LLM_MODEL=glm-4-flash
+      - LLM_API_KEY=${LLM_API_KEY:?请配置LLM_API_KEY}
+      # 缓存配置（默认内存，可选redis）
+      - CACHE_BACKEND=memory
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Redis缓存（可选，需要时取消注释）
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: railway-redis
+  #   ports:
+  #     - "127.0.0.1:6379:6379"
+  #   volumes:
+  #     - redis-data:/data
+  #   command: redis-server --appendonly yes
+  #   restart: unless-stopped
+
+volumes:
+  # redis-data:
